@@ -52,7 +52,7 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 - [x] T002 Add TypeScript (strict) base config shared by all packages — `tsconfig.base.json`
 - [x] T003 [P] Add ESLint + Prettier config with Conventional Commits check — repo root
 - [x] T004 [P] Create Expo app (TypeScript, Expo Router, dev build) — `apps/mobile`
-- [ ] T005 [P] Create NestJS app with health endpoint `GET /v1/health` — `apps/api/src/health`
+- [x] T005 [P] Create NestJS app with health endpoint `GET /v1/health` — `apps/api/src/health`
 - [ ] T006 [P] Create `packages/shared` with Jest set up and an empty `src/index.ts` — `packages/shared`
 - [ ] T007 Initialise Supabase CLI project and local stack — `supabase/config.toml`
 - [ ] T008 Create Supabase projects for dev and prod; store keys in env files and CI secrets (never in code) — `.env.example`
