@@ -657,6 +657,8 @@ Every policy above needs tests proving allowed **and** denied access (`rules.md`
 
 PowerSync **Sync Streams** define what syncs (`powersync/sync-config.yaml`). Sync Streams are GA and replace PowerSync's older Sync Rules, which are deprecated.
 
+Replication setup lives in `supabase/migrations/0000_powersync.sql`: the `powersync` publication (all tables) and the `powersync_role` that hosted PowerSync instances connect as. The role's password is set by hand once per hosted environment, never in a migration. The local PowerSync service (`powersync/docker-compose.yaml`) connects as the local `postgres` user.
+
 ### 8.1 What syncs
 
 | Stream | Contents | Who gets it |

@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://unpkg.com/@powersync/service-sync-rules@latest/schema/sync_rules.json
+#
+# PowerSync Sync Streams: what each user's phone downloads (data-model.md
+# section 8). The library and user_data streams arrive in T036, once the
+# tables exist. The local service reads this file at start; restart it after
+# changes. Hosted instances: paste this file into the dashboard and deploy.
+
+config:
+  edition: 3
+
+streams: {}
