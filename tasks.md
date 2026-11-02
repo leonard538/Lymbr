@@ -59,7 +59,7 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 - [ ] T009 Set up PowerSync instances for local/dev/prod connected to Supabase — `powersync/`, `supabase/migrations/0000_powersync.sql`
 - [ ] T010 GitHub Actions CI: install, typecheck, lint, test for all packages — `.github/workflows/ci.yml`
 - [ ] T011 [P] Configure EAS Build profiles (development, preview, production) — `apps/mobile/eas.json`
-- [ ] T012 [P] Copy project docs into repo root and add a short README pointing to them — `README.md`
+- [x] T012 [P] Copy project docs into repo root and add a short README pointing to them — `README.md`
 
 **Checkpoint**: CI is green; the Expo dev build opens a blank screen on a real phone; the API health check responds.
 
