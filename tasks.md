@@ -55,7 +55,7 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 - [x] T005 [P] Create NestJS app with health endpoint `GET /v1/health` — `apps/api/src/health`
 - [x] T006 [P] Create `packages/shared` with Jest set up and an empty `src/index.ts` — `packages/shared`
 - [x] T007 Initialise Supabase CLI project and local stack — `supabase/config.toml`
-- [ ] T008 Create Supabase projects for dev and prod; store keys in env files and CI secrets (never in code) — `.env.example`
+- [ ] T008 Create Supabase projects for dev and prod; store keys in env files and CI secrets (never in code) — `apps/mobile/.env.example`, `apps/api/.env.example`
 - [ ] T009 Set up PowerSync instances for local/dev/prod connected to Supabase — `powersync/`
 - [ ] T010 GitHub Actions CI: install, typecheck, lint, test for all packages — `.github/workflows/ci.yml`
 - [ ] T011 [P] Configure EAS Build profiles (development, preview, production) — `apps/mobile/eas.json`
