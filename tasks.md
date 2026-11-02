@@ -48,7 +48,7 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 
 **Goal**: an empty monorepo that builds, lints and runs on a phone, with all environments in place.
 
-- [ ] T001 Create monorepo with pnpm workspaces + Turborepo: `apps/mobile`, `apps/api`, `packages/shared`, `supabase/`, `powersync/` — repo root
+- [x] T001 Create monorepo with pnpm workspaces + Turborepo: `apps/mobile`, `apps/api`, `packages/shared`, `supabase/`, `powersync/` — repo root
 - [ ] T002 Add TypeScript (strict) base config shared by all packages — `tsconfig.base.json`
 - [ ] T003 [P] Add ESLint + Prettier config with Conventional Commits check — repo root
 - [ ] T004 [P] Create Expo app (TypeScript, Expo Router, dev build) — `apps/mobile`
