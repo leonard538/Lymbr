@@ -50,7 +50,7 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 
 - [x] T001 Create monorepo with pnpm workspaces + Turborepo: `apps/mobile`, `apps/api`, `packages/shared`, `supabase/`, `powersync/` — repo root
 - [x] T002 Add TypeScript (strict) base config shared by all packages — `tsconfig.base.json`
-- [ ] T003 [P] Add ESLint + Prettier config with Conventional Commits check — repo root
+- [x] T003 [P] Add ESLint + Prettier config with Conventional Commits check — repo root
 - [ ] T004 [P] Create Expo app (TypeScript, Expo Router, dev build) — `apps/mobile`
 - [ ] T005 [P] Create NestJS app with health endpoint `GET /v1/health` — `apps/api/src/health`
 - [ ] T006 [P] Create `packages/shared` with Jest set up and an empty `src/index.ts` — `packages/shared`
