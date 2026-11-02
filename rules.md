@@ -39,7 +39,7 @@ Related docs: `specs.md` (what and why), `architecture.md` (how it fits together
 - **Row-level security (RLS) is on for every table.** No table ships without RLS policies and tests for them.
 - **Default deny.** A user can read another user's row only if that row is shared *and* the two are accepted friends *and* neither has blocked the other.
 - **Photos** live in a private storage bucket and are served with short-lived signed URLs. Photo visibility is checked per photo, not per session.
-- **Secrets never ship in the app.** The mobile app only holds the Supabase URL and anon (public) key. Service-role keys live only on the server.
+- **Secrets never ship in the app.** The mobile app only holds the Supabase URL and publishable key. Supabase secret keys live only on the server.
 - **No personal data in URLs, logs or analytics.** Log IDs, not names, weights or photos.
 - **Account deletion** removes all of the user's data and photos.
 
@@ -80,7 +80,7 @@ Related docs: `specs.md` (what and why), `architecture.md` (how it fits together
 
 - Branches: `feat/<short-name>`, `fix/<short-name>`, `chore/<short-name>`.
 - Commits follow Conventional Commits (`feat:`, `fix:`, `chore:`, `docs:`, `test:`).
-- Small pull requests, one concern each. Each PR links the user story or FR it implements (e.g., `US1`, `FR-031`).
+- One PR per phase (or per user story for larger phases), one commit per task. Each commit references its task ID (e.g., `T031`); each PR links the user stories or FRs it implements (e.g., `US1`, `FR-031`).
 - CI must pass (typecheck, lint, tests) before merge.
 
 ## 8. Rules for AI coding agents

@@ -109,7 +109,7 @@ sequenceDiagram
   Shared-->>App: [Dumbbell Incline Press, Machine Incline Press]
   App->>Local: BEGIN
   App->>Local: insert sessions (status=active, plan_id, plan_name_snapshot, gym_id, started_at, local_date, timezone)
-  App->>Local: insert session_entries (copy of each plan entry, status=planned)
+  App->>Local: insert session_entries (copy of each plan entry, origin=planned, status=pending)
   App->>Local: COMMIT
   App->>User: Session screen; flagged entry shows "Not available here: swap?"
 ```
@@ -119,12 +119,12 @@ sequenceDiagram
 1. User starts a plan. The app suggests the last-used gym; the user can change it or choose "No gym".
 2. The app checks each plan entry's variation equipment against the gym's equipment (only if `equipment_configured` is true).
 3. Unavailable variations are **flagged, not auto-swapped**. The user decides (see flow 4).
-4. In one local transaction, the app creates the `sessions` row and copies every plan entry into `session_entries` (`status = planned`). This is the snapshot: from now on the session never reads from the plan.
+4. In one local transaction, the app creates the `sessions` row and copies every plan entry into `session_entries` (`origin = planned`, `status = pending`). This is the snapshot: from now on the session never reads from the plan.
 5. Works fully offline.
 
 **Variants**
 
-- **Empty session**: same, with no entries. User adds exercises as they go (`status = added`).
+- **Empty session**: same, with no entries. User adds exercises as they go (`origin = added`).
 - **Repeat**: entries copied from a past session instead of a plan (flow 10).
 - **Scheduled plan**: on a scheduled day, Home shows "Today: Push Day", which starts this flow.
 
@@ -167,7 +167,7 @@ sequenceDiagram
 5. If the set is not a warm-up, PR detection compares it with current records:
    - **heaviest**: higher `weight_kg` (or higher stack level within `stack`);
    - **rep_at_weight**: more reps than ever at this exact `weight_kg`;
-   - **session_volume**: checked at session finish (flow 5).
+   - **session_volume**: checked at session finish (flow 5). Kg/lb sets are summed in kg; `stack` sets are summed as stack level × reps and compared only with other stack sessions of the same variation.
 6. New PRs: old record gets `superseded_at`; new record is inserted; the app celebrates.
 
 **Edge cases**: mixed units on one variation (compared in kg); `stack` sets only compared with `stack` sets; first-ever set on a variation (no "Last time", no PR celebration on the very first set, so day one isn't all confetti); a drop set or failure set can still set a PR.
@@ -211,7 +211,7 @@ sequenceDiagram
 | Action | Change |
 |---|---|
 | Skip | `status = skipped` (kept, so history shows it was skipped) |
-| Add exercise | new entry, `status = added` |
+| Add exercise | new entry, `origin = added`, `status = pending` |
 | Reorder | update `position` |
 | Remove an added exercise | soft-delete the entry (and its sets) |
 
@@ -256,7 +256,7 @@ sequenceDiagram
 3. **If the session deviated**, the user is asked to save changes to the plan, **default No**. "Yes" maps the session back to the plan:
    - swapped variation → becomes the preferred variation (old one moves to alternatives),
    - skipped → kept in plan (skips are never saved as removals unless the user removes it in the plan editor),
-   - added → appended to the plan,
+   - added (`origin = added`) → appended to the plan,
    - new order → applied.
 4. User adds optional photos, cover, notes, body weight; chooses visibility. Defaults: session private, each photo private.
 5. Session marked `finished`. Local weekly goal and streak update immediately; the server recalculates after sync (flow 11).
@@ -306,7 +306,7 @@ sequenceDiagram
 - Every local write is safe the moment it's saved. Sync is background work.
 - Ops upload in the order they were made, so a `sets` row never arrives before its `session_entries` row.
 - One failed row never blocks the queue and is never silently dropped (`api.md` §3.3).
-- **Conflicts**: same row edited on two devices → last write wins by server `updated_at`. Different sets in the same session never conflict (each set is its own row).
+- **Conflicts**: same row edited on two devices → last write wins by server `updated_at`, so the last upload wins (a known v1 limitation, `architecture.md` §10). Different sets in the same session never conflict (each set is its own row).
 - **Delete vs edit**: deletes are soft, so an edit on another device can't resurrect or lose data silently. The row stays recoverable during the purge window.
 - Social screens show "You're offline. The feed will load when you're back online." Everything else works normally.
 
@@ -386,18 +386,18 @@ sequenceDiagram
   App->>Local: latest recovery_inputs + muscle_soreness
   App->>Shared: estimateRecovery(trainingData, inputs, now)
   Shared-->>App: per muscle: hours left + reasons
-  App->>User: Quads: ~36 h (heavy session, failure sets)
+  App->>User: Quads: ~36 h left (high volume: 72 h, trained 36 h ago)
   User->>App: Quads soreness = 3, readiness = 2
   App->>Local: insert recovery_inputs + muscle_soreness
   App->>Shared: estimateRecovery(…)
-  Shared-->>App: Quads: ~84 h (soreness +48 h, low readiness)
+  Shared-->>App: Quads: ~96 h left (72 h + soreness 3: +48 h + readiness 2: +12 h, trained 36 h ago)
   App->>User: Updated estimate with reasons
   User->>App: Mark Chest "recovered"
   App->>Local: muscle_soreness override = recovered
   App->>User: Chest shown as recovered (manual)
 ```
 
-**Rule (from `data-model.md` and FR-074)**: base 48 h, 72 h after high volume or failure sets; +24 h per soreness level above 1; readiness adjusts within limits; manual override wins. Always labelled "guidance, not medical advice". Exact constants live in `packages/shared` and are covered by tests.
+**Rule (FR-074)**: base 48 h; 72 h after high volume (6 or more working sets for that muscle in the session, primary = 1, secondary = 0.5) or any failure set for that muscle; +24 h per soreness level above 1; readiness 1 → +24 h, 2 → +12 h, 3 → 0, 4 → −6 h, 5 → −12 h; the total window never goes below 24 h; a manual override always wins. Always labelled "guidance, not medical advice". Exact constants live in `packages/shared` and are covered by tests.
 
 **Weekly heatmap**: same data, summing working sets per muscle group this week (primary 1, secondary 0.5), compared with the user's guide range.
 
@@ -414,7 +414,7 @@ sequenceDiagram
   participant Local
 
   User->>App: Past session → "Repeat"
-  App->>Local: copy its non-skipped entries into a new active session (status=planned, source_session_id)
+  App->>Local: copy its non-skipped entries into a new active session (origin=planned, status=pending, source_session_id)
   App->>User: Session screen with "Last time" from that session
   User->>App: Past session → "Save as plan"
   App->>User: Name the plan
@@ -453,7 +453,7 @@ sequenceDiagram
 
 - A week counts if finished sessions in that week (by `local_date`, user's week start) ≥ weekly goal.
 - The current week never breaks the streak until it's over.
-- Changing the goal applies from the current week: a new `weekly_goals` row is added with `effective_from` = start of this week. Past weeks are always judged against the goal that was in effect then, so changing the goal never rewrites history.
+- Changing the goal applies from the current week: this week's `weekly_goals` row is written with `effective_from` = start of this week. Its `id` is a UUID v5 of the owner and that date, so two devices changing the goal offline write the same row. Past weeks are always judged against the goal that was in effect then, so changing the goal never rewrites history.
 - Milestones appear in friends' feeds only if the streak is public. They don't send push notifications to friends (keeps it low-pressure).
 - No "streak lost" shaming. If a streak ends, Home just shows the new week's progress.
 
@@ -575,7 +575,7 @@ sequenceDiagram
   DB-->>Push: (via API) "Whi tagged you in Push Day"
   Ana->>AApp: Open invite → Accept
   AApp->>DB: rpc respond_buddy_tag(id, accept=true)
-  DB->>DB: create Ana's session (same date/time, entries copied as planned, no sets, private)
+  DB->>DB: create Ana's session (same date/time, entries copied with origin=planned, status=pending, no sets, private)
   DB-->>AApp: { session_id }
   Sync-->>AApp: new session arrives
   AApp->>Ana: Fill in your own sets
@@ -644,7 +644,7 @@ sequenceDiagram
   API->>DB: upsert by wger IDs (service role)
   API->>DB: mark missing items is_active = false (never delete)
   API->>DB: save run summary
-  DB-->>Sync: library bucket changed
+  DB-->>Sync: library rows changed
   Sync-->>Local: phones receive updates in background
 ```
 
@@ -668,7 +668,7 @@ stateDiagram-v2
   deleted --> [*]: purged after 30 days
 ```
 
-Buddy-accepted sessions start as `active` with planned entries and no sets.
+Buddy-accepted sessions start as `active` with pending entries (`origin = planned`) and no sets.
 
 ### Friendship
 

@@ -46,7 +46,7 @@ Lymbr's biggest risks, in order. Testing effort follows this list.
 | Integration: database (RLS, RPCs, triggers) | pgTAP via `supabase test db` | `supabase/tests/*.sql` | Every PR (local Supabase in CI) |
 | Integration: sync connector | Jest with a fake Supabase client and a real local Supabase | `apps/mobile/db/__tests__/` | Every PR |
 | Integration: NestJS | Jest + Supertest | `apps/api/src/**/*.spec.ts` | Every PR |
-| End-to-end | Maestro on iOS simulator + Android emulator, dev Supabase | `apps/mobile/e2e/*.yaml` | Nightly, and before each release |
+| End-to-end | Maestro on an Android emulator or device, dev Supabase (iOS simulator deferred: needs a Mac and an Apple Developer account) | `apps/mobile/e2e/*.yaml` | Nightly, and before each release |
 | Performance | Scripted measurements on a mid-range Android phone | `apps/mobile/perf/` | Before each release |
 | Manual | Checklists (§10) | This file | Before each release to friends |
 
@@ -136,6 +136,8 @@ Coverage target: **100% of branches** for these modules. They hold the numbers u
 | Stack 9 after Stack 8 | Heaviest PR in `stack` group |
 | Stack set vs kg set | Never compared |
 | Session volume beats previous best | Volume PR at finish |
+| Stack session volume (stack level × reps) beats previous stack best | Volume PR in `stack` group; never compared with kg volume |
+| Session mixing kg and stack sets on one variation | Volume checked once per unit group |
 | `rebuildPRs` after deleting the PR set | Previous record restored as current |
 | `rebuildPRs` after back-dating a set earlier than the current PR | History reordered correctly |
 | `rebuildPRs` run twice | Same result (idempotent) |
@@ -144,7 +146,8 @@ Coverage target: **100% of branches** for these modules. They hold the numbers u
 
 | Case | Expected |
 |---|---|
-| Snapshot plan → session | Same exercises, variations, order; `status = planned` |
+| Snapshot plan → session | Same exercises, variations, order; `origin = planned`, `status = pending` |
+| Added exercise gets sets | `origin` stays `added` while `status` becomes `done`; apply still appends it to the plan |
 | Swap only | `deviated = true`; diff shows swap |
 | Skip only | Diff shows skip; `applySessionToPlan` keeps the exercise |
 | Add exercise | Appended to plan on apply |
@@ -174,17 +177,21 @@ Coverage target: **100% of branches** for these modules. They hold the numbers u
 | Warm-ups | Excluded |
 | Variation with muscle override | Override used instead of exercise muscles |
 | Sets outside the week | Excluded |
-| Heatmap step boundaries | 0, 1–4, 5–9, guide range, above guide (with custom guide 8–16) |
+| Heatmap steps, default guide 10–20 | 0 → 0; 4.5 → 1; 5 → 2; 9.5 → 2; 10 → 3; 20 → 3; 20.5 → 4 |
+| Heatmap steps, custom guide 8–16 | 3.5 → 1; 4 → 2; 7.5 → 2; 8 → 3; 16 → 3; 16.5 → 4 |
 
 ### 5.7 Recovery (`recovery.ts`)
 
 | Case | Expected |
 |---|---|
-| Moderate session | ~48 h |
-| High volume or failure sets | ~72 h |
+| Moderate session (5.5 sets for the muscle, no failure sets) | 48 h |
+| 6 sets for the muscle (e.g., 4 primary + 4 secondary = 6) | 72 h |
+| Any failure set for the muscle, even at low volume | 72 h |
 | Soreness 1 | No change |
 | Soreness 3 | +48 h |
-| Readiness 1 / 5 | Extends / shortens within limits |
+| Readiness 1 / 2 / 3 / 4 / 5 | +24 h / +12 h / 0 / −6 h / −12 h |
+| Lowest inputs (moderate session, soreness 0, readiness 5) | 36 h; the window never goes below the 24 h floor |
+| flows.md §9 example (72 h, soreness 3, readiness 2, trained 36 h ago) | 96 h left |
 | Manual "recovered" | 0 h remaining, reason "Marked by you" |
 | Manual "not recovered" after estimate expired | Still not recovered until changed |
 | Muscle never trained | No estimate |
@@ -233,7 +240,8 @@ Every cell is a test. **R** = can read, **–** = cannot read (query returns not
 | Gyms | R W | – | – | – | – |
 | Streak (private) | R | – | – | – | – |
 | Streak (friends) | R | R | – | – | – |
-| Custom variation | R W | R | – | – | – |
+| Custom variation used in a shared session or plan | R W | R | – | – | – |
+| Custom variation not used in anything shared with Ana | R W | – | – | – | – |
 | Library exercise | R | R | R | R | R |
 | Comments on shared session | R W | R W | – | – | – |
 
