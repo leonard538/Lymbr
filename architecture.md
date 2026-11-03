@@ -5,7 +5,7 @@
 **Status**: Draft for review
 **Related**: `specs.md` (requirements), `rules.md` (rules that constrain this design)
 
-This document explains how Lymbr is built: the stack, the parts of the system, how data flows, and the key technical decisions. The detailed schema will live in `data-model.md` and the endpoints in `api.md`. This file defines the shape they must fit.
+This document explains how Lymbr is built: the stack, the parts of the system, how data flows, and the key technical decisions. The detailed schema lives in `data-model.md` and the endpoints in `api.md`. This file defines the shape they must fit.
 
 ---
 
@@ -70,7 +70,7 @@ flowchart LR
 | Push notifications | Expo Push service | Works with Expo apps on both platforms. |
 | Exercise library | wger (imported, not called live) | Free, no auth for public data, includes muscles and equipment. |
 | Monorepo | pnpm workspaces + Turborepo | Share `packages/shared` between app and API. |
-| Testing | Jest, React Native Testing Library, Maestro (E2E), pgTAP or SQL tests for RLS | See `testing.md` (later). |
+| Testing | Jest, React Native Testing Library, Maestro (E2E), pgTAP for RLS | See `testing.md`. |
 | CI | GitHub Actions | Typecheck, lint, test on every PR. |
 
 ---
@@ -85,23 +85,36 @@ lymbr/
 │  │  ├─ features/         # one folder per feature (logging, plans, calendar, social…)
 │  │  ├─ db/               # PowerSync schema, connector, queries
 │  │  ├─ components/       # shared UI components
-│  │  └─ assets/body-map/  # front/back body SVGs
+│  │  ├─ theme/            # design tokens and typography
+│  │  ├─ lib/              # Supabase client, error reporting
+│  │  ├─ assets/body-map/  # front/back body SVGs
+│  │  ├─ e2e/              # Maestro flows
+│  │  └─ eas.json          # EAS Build profiles
 │  └─ api/                 # NestJS service
 │     └─ src/
-│        ├─ wger-import/
+│        ├─ health/
+│        ├─ auth/          # Supabase JWT guard
+│        ├─ webhooks/
 │        ├─ notifications/
-│        └─ auth/          # Supabase JWT guard
+│        ├─ wger-import/
+│        ├─ account/
+│        └─ cleanup/
 ├─ packages/
 │  └─ shared/              # pure TS: units, PRs, volume, recovery, streaks, Zod schemas, types
 ├─ supabase/
+│  ├─ config.toml          # Supabase CLI and local stack
 │  ├─ migrations/          # all schema + RLS changes
 │  ├─ seed.sql             # muscles, equipment, test data
-│  └─ tests/               # RLS tests
+│  └─ tests/               # pgTAP tests: RLS, RPCs, triggers
 ├─ powersync/
-│  └─ sync-rules.yaml      # what data each user syncs
-├─ specs.md
-├─ rules.md
-└─ architecture.md
+│  ├─ sync-config.yaml     # Sync Streams: what data each user syncs
+│  └─ docker-compose.yaml  # local PowerSync service (+ service.yaml config)
+├─ eslint-rules/           # custom lint rules (radius, icons)
+├─ .github/workflows/      # CI
+├─ package.json, pnpm-workspace.yaml, turbo.json, tsconfig.base.json
+├─ README.md
+└─ specs.md, rules.md, architecture.md, data-model.md, api.md,
+   flows.md, design.md, testing.md, tasks.md
 ```
 
 ---
@@ -124,14 +137,14 @@ Owns everything the user does, offline included:
 
 - Streams the user's own data and the shared exercise library from Postgres into local SQLite.
 - Queues local changes and uploads them through our connector to Supabase.
-- Sync rules decide what each user downloads (section 6).
+- Sync Streams decide what each user downloads (section 6).
 
 ### 4.3 Supabase
 
 - **Postgres**: the source of truth once data has synced.
 - **RLS policies**: enforce private-by-default and friends-only sharing (see `rules.md` §3).
 - **Postgres functions (RPCs)** for multi-step social actions that must be atomic: accepting a friend request, copying a friend's plan, accepting a gym-buddy invite.
-- **Storage**: private `session-photos` bucket.
+- **Storage**: private `session-photos` and `avatars` buckets.
 - **Auth**: sign-up, sign-in, JWTs.
 - **Database webhooks**: notify NestJS when likes, comments, friend requests or buddy invites are created.
 
@@ -143,13 +156,13 @@ Kept small on purpose. Its jobs:
 - **Notifications**: receives webhooks, checks the recipient's notification settings, sends via Expo Push, and stores tokens per device.
 - **Future server logic** that doesn't belong in SQL or on the phone.
 
-All endpoints verify the Supabase JWT. The service uses the Supabase service-role key, which never leaves the server.
+User-facing endpoints verify the Supabase JWT. `GET /health` is public, and webhook and admin endpoints use shared secrets instead (`api.md` §2 and §6.1). The service uses the Supabase secret key, which never leaves the server.
 
 ---
 
 ## 5. Key data flows
 
-Detailed sequence diagrams will go in `flows.md`. The essentials:
+Detailed sequence diagrams are in `flows.md`. The essentials:
 
 ### 5.1 Logging a session (offline-safe)
 
@@ -162,7 +175,7 @@ Detailed sequence diagrams will go in `flows.md`. The essentials:
 ### 5.2 Sync and conflicts
 
 - Each Set, SessionEntry and Session is its own row, so two devices editing different sets never conflict.
-- Same-row conflicts use **last write wins** by `updated_at`.
+- Same-row conflicts use **last write wins** by the server's `updated_at`, which in practice means the last upload wins (a known v1 limitation, see §10).
 - Deletes are soft (`deleted_at`), so a delete and an edit on different devices never lose a set silently. The deleted row stays recoverable.
 
 ### 5.3 Sharing a session
@@ -191,10 +204,12 @@ Like/comment/request inserted → database webhook → NestJS → Expo Push → 
 | User-owned, synced | `profiles`, `body_metrics`, `gyms`, `gym_equipment`, custom `exercises`/`variations`, `plans`, `plan_entries`, `sessions`, `session_entries`, `sets`, `personal_records`, `photos`, `recovery_inputs`, `nutrition_logs` |
 | Social, online | `friendships`, `likes`, `comments`, `plan_shares`, `buddy_tags`, `notifications`, `push_tokens` |
 
-### 6.2 Sync rules (what each phone downloads)
+### 6.2 Sync Streams (what each phone downloads)
 
-- **Global bucket**: the whole active exercise library, muscles, equipment.
-- **Per-user bucket**: every row the user owns in the user-owned tables.
+PowerSync Sync Streams (`powersync/sync-config.yaml`) define what syncs. Sync Streams replaced PowerSync's older Sync Rules, which are deprecated.
+
+- **`library` stream**: the whole active exercise library, muscles, equipment.
+- **`user_data` stream**: every row the user owns in the user-owned tables.
 - **Not synced**: social tables and friends' data. These are fetched online.
 
 The library is small enough (well under a few thousand exercises) to sync in full.
@@ -205,7 +220,7 @@ Each `sets` row stores `weight_value`, `weight_unit` (`kg` | `lb` | `stack`) and
 
 ### 6.4 Muscles and the body map
 
-- wger muscles are mapped to our `muscle_groups` (chest, back, shoulders, biceps, triceps, forearms, abs, obliques, glutes, quads, hamstrings, calves, traps, lats).
+- wger muscles are mapped to our 18 `muscle_groups` (chest, upper back, lats, traps, front delts, side delts, rear delts, biceps, triceps, forearms, abs, obliques, lower back, glutes, quads, hamstrings, adductors, calves). `data-model.md` §4.2 is the source of truth for this list.
 - Each muscle group has a region ID in the front/back body SVG.
 - Weekly volume: primary muscle = 1 set, secondary = 0.5 set, warm-ups excluded.
 
@@ -213,9 +228,10 @@ Each `sets` row stores `weight_value`, `weight_unit` (`kg` | `lb` | `stack`) and
 
 Pure function in `packages/shared`:
 
-- Base: ~48 h after training a muscle; ~72 h if that muscle got high volume or sets to failure.
+- Base: ~48 h after training a muscle; ~72 h if that muscle got high volume (6 or more working sets in the session, primary = 1, secondary = 0.5) or any set to failure.
 - Soreness (0–3): +24 h per level above 1.
-- Readiness (1–5): low readiness extends, high shortens, within limits.
+- Readiness (1–5): 1 → +24 h, 2 → +12 h, 3 → 0, 4 → −6 h, 5 → −12 h.
+- The total recovery window never goes below 24 h; only a manual override can make it shorter.
 - A manual "recovered / not recovered" override always wins.
 - The function returns both the estimate and the reasons, so the UI can explain it.
 
@@ -227,7 +243,7 @@ Pure function in `packages/shared`:
 - Shared content requires: row visibility = friends, accepted friendship, no block in either direction.
 - Body metrics, nutrition and recovery inputs have owner-only policies with no sharing path.
 - Photos: private bucket; signed URLs created only after a per-photo visibility check.
-- Mobile app holds only the anon key; service-role key only in NestJS.
+- Mobile app holds only the Supabase publishable key; the secret key lives only in NestJS.
 - Account deletion: an RPC plus a NestJS job removes rows and storage objects.
 
 ---
@@ -240,7 +256,7 @@ Pure function in `packages/shared`:
 | Dev | Shared testing | Separate Supabase project and PowerSync instance. |
 | Prod | Whi and friends | Separate Supabase project and PowerSync instance. |
 
-- **Mobile**: Expo EAS Build for installable builds; EAS Update for quick JS-only fixes. Distribute to friends via TestFlight (iOS) and internal testing (Android).
+- **Mobile**: Expo EAS Build for installable builds; EAS Update for quick JS-only fixes. Android first: distribute to friends via Google Play internal testing. TestFlight (iOS) is deferred until there is an Apple Developer account.
 - **API**: deployed as a container to a small host (choice deferred; any Node host works).
 - **Migrations**: applied by CI to dev, then manually promoted to prod.
 
@@ -264,13 +280,14 @@ Pure function in `packages/shared`:
 - **PowerSync hosting cost/limits**: start on the hosted free tier or self-host the open edition; review when the test group grows.
 - **wger data quality**: some exercises lack images or muscles. Users can edit muscles on their own variations; we may curate a starter set.
 - **Body map art**: need a front/back SVG with separable muscle regions (to make or license during design).
-- **Clock drift** on devices can affect last-write-wins; use server timestamps for `updated_at` where possible.
+- **Known limitation (v1): "last write wins" means last upload wins.** The server sets `updated_at` when a change arrives, which avoids phone clock drift. The cost: if an older offline edit uploads after a newer edit of the same row from another device, the older edit wins. Accepted for v1, because data is mostly single-user and every set is its own row, so it takes the same set edited on two devices.
 - **Push notification permissions** on iOS: ask at a meaningful moment (first friend added), not on first launch.
 
-## 11. Next documents
+## 11. Related documents
 
-1. `data-model.md`: every table, column, index, and RLS policy.
-2. `api.md`: RPCs, NestJS endpoints, webhooks.
-3. `flows.md`: sequence diagrams for logging, sync, sharing, buddy invites.
-4. `design.md`: screens and design system.
-5. `testing.md` and `tasks.md`.
+- `data-model.md`: every table, column, index, RLS policy, and what syncs.
+- `api.md`: sync, RPCs, storage, NestJS endpoints, webhooks.
+- `flows.md`: sequence diagrams for logging, sync, sharing, buddy invites.
+- `design.md`: visual direction, tokens, components, screens.
+- `testing.md`: test strategy and required tests.
+- `tasks.md`: the ordered build checklist.

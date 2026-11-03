@@ -15,7 +15,8 @@ This document defines every table, column, relationship, index, and row-level se
 |---|---|
 | Primary keys | `id uuid`, generated on the client (`crypto.randomUUID()`) so rows can be created offline. Library rows get server-generated UUIDs. |
 | Standard columns | Every user-owned table has `id`, `owner_id`, `created_at`, `updated_at`, `deleted_at`. |
-| `owner_id` everywhere | Child tables (e.g., `sets`) also store `owner_id`, even though it could be derived. This keeps RLS and PowerSync sync rules simple and fast. |
+| `owner_id` everywhere | Child tables (e.g., `sets`) also store `owner_id`, even though it could be derived. This keeps RLS and PowerSync Sync Streams simple and fast. |
+| Join tables | Join tables (`exercise_muscles`, `variation_equipment`, `variation_muscles`, `gym_equipment`) also have an `id uuid` primary key, because PowerSync needs a single `id` column on every synced table. Their natural two-column key is a unique constraint. |
 | Timestamps | `timestamptz`. `updated_at` is set by a trigger on the server (avoids phone clock drift). |
 | Soft deletes | Synced tables are never hard-deleted by users; set `deleted_at`. A nightly job purges rows deleted more than 30 days ago. |
 | Naming | Plural `snake_case` tables, `snake_case` columns, `_id` suffix for foreign keys. |
@@ -35,7 +36,8 @@ This document defines every table, column, relationship, index, and row-level se
 | `set_type` | `warmup`, `working`, `drop`, `failure` |
 | `muscle_role` | `primary`, `secondary` |
 | `session_status` | `active`, `finished` |
-| `entry_status` | `planned`, `done`, `skipped`, `added` |
+| `entry_origin` | `planned`, `added` |
+| `entry_status` | `pending`, `done`, `skipped` |
 | `record_type` | `heaviest`, `rep_at_weight`, `session_volume` |
 | `friendship_status` | `pending`, `accepted`, `declined`, `blocked` |
 | `buddy_status` | `pending`, `accepted`, `declined` |
@@ -117,20 +119,22 @@ Goal history, so changing the goal never rewrites past weeks (US10 scenario 3).
 
 | Column | Type | Notes |
 |---|---|---|
-| id | uuid PK | |
+| id | uuid PK | Deterministic: UUID v5 of `owner_id` + `effective_from` (namespace constant in `packages/shared`). Two devices setting the same week's goal offline write the same row, so they merge instead of colliding. |
 | owner_id | uuid FK NN | |
 | goal | smallint | 1–14, or null for "no goal". |
 | effective_from | date NN | First day of the week the goal starts. U with owner_id. |
 
-Synced in `user_data`. Changing the goal mid-week replaces that week's row.
+Synced in `user_data`. Changing the goal mid-week updates that week's row (same `id`).
 
 #### `push_tokens`
 
+Not synced. Registered with an upsert on `token` (`api.md` §4.8).
+
 | Column | Type | Notes |
 |---|---|---|
-| id | uuid PK | |
+| id | uuid PK | Server default `gen_random_uuid()`. |
 | owner_id | uuid FK → profiles NN | |
-| token | text U NN | Expo push token. |
+| token | text U NN | Expo push token. Upsert conflict target. |
 | platform | text NN | `ios` / `android`. |
 | last_seen_at | timestamptz NN | |
 
@@ -191,10 +195,12 @@ Fixed seed list used by the body map and volume tracking.
 
 | Column | Type | Notes |
 |---|---|---|
-| exercise_id | uuid FK → exercises | PK part |
-| muscle_group_id | smallint FK → muscle_groups | PK part |
+| id | uuid PK | |
+| exercise_id | uuid FK → exercises NN | |
+| muscle_group_id | smallint FK → muscle_groups NN | |
 | role | muscle_role NN | |
 | owner_id | uuid | Copied from exercise (null for library). |
+| U | (exercise_id, muscle_group_id) | |
 
 Custom exercises must have at least one `primary` row (enforced in app and by a deferred constraint trigger).
 
@@ -220,19 +226,23 @@ Custom exercises must have at least one `primary` row (enforced in app and by a 
 
 | Column | Type | Notes |
 |---|---|---|
-| variation_id | uuid FK → variations | PK part |
-| equipment_id | uuid FK → equipment | PK part |
+| id | uuid PK | |
+| variation_id | uuid FK → variations NN | |
+| equipment_id | uuid FK → equipment NN | |
 | owner_id | uuid | Null for library. |
+| U | (variation_id, equipment_id) | |
 
 #### `variation_muscles`
 Optional override. If a variation has no rows here, it uses its exercise's muscles.
 
 | Column | Type | Notes |
 |---|---|---|
-| variation_id | uuid FK → variations | PK part |
-| muscle_group_id | smallint FK | PK part |
+| id | uuid PK | |
+| variation_id | uuid FK → variations NN | |
+| muscle_group_id | smallint FK NN | |
 | role | muscle_role NN | |
 | owner_id | uuid NN | Overrides are always user-owned. |
+| U | (variation_id, muscle_group_id) | |
 
 ### 4.3 Gyms
 
@@ -250,10 +260,12 @@ Optional override. If a variation has no rows here, it uses its exercise's muscl
 
 | Column | Type | Notes |
 |---|---|---|
-| gym_id | uuid FK → gyms | PK part |
-| equipment_id | uuid FK → equipment | PK part |
+| id | uuid PK | |
+| gym_id | uuid FK → gyms NN | |
+| equipment_id | uuid FK → equipment NN | |
 | owner_id | uuid NN | |
 | learned | boolean NN | True when added automatically because a variation was used here (FR-084). |
+| U | (gym_id, equipment_id) | |
 
 ### 4.4 Plans
 
@@ -345,7 +357,8 @@ One exercise as actually done in a session. Snapshot of the plan at start, then 
 | variation_id | uuid FK NN | Variation actually used. |
 | plan_entry_id | uuid | Link to the plan entry it came from (not an FK). |
 | swapped_from_variation_id | uuid | The plan's variation, if swapped. |
-| status | entry_status NN | |
+| origin | entry_origin NN | `planned` = copied in at start (from a plan, a past session, or a buddy invite); `added` = added during the session. Never changes. |
+| status | entry_status NN | Default `pending`. `done` once a set is logged; `skipped` when the user skips it. |
 | notes | text | |
 
 #### `sets`
@@ -393,13 +406,16 @@ Current and past PRs per variation. Written on device when a set is saved (US5).
 | record_type | record_type NN | |
 | unit_group | text NN | `mass` (kg/lb compared in kg) or `stack`. |
 | weight_kg | numeric(8,3) | For `heaviest` and `rep_at_weight` in `mass`. |
-| stack_level | numeric(7,3) | For `stack` records. |
+| stack_level | numeric(7,3) | For `heaviest` and `rep_at_weight` in `stack`. |
 | reps | smallint | For `rep_at_weight`. |
-| volume_kg | numeric(10,2) | For `session_volume`. |
+| volume_kg | numeric(10,2) | For `session_volume` in `mass`. |
+| stack_volume | numeric(10,2) | For `session_volume` in `stack`: sum of stack level × reps. |
 | achieved_on | date NN | Session's `local_date`. |
 | superseded_at | timestamptz | Set when beaten; null = current record. |
 
-Rep PRs are stored per weight: the best reps at each distinct `weight_kg`.
+Rep PRs are stored per weight: the best reps at each distinct `weight_kg` (or stack level).
+
+Session volume is tracked per unit group: `mass` volume in kg, and `stack` volume as stack level × reps. A stack volume is only compared with other stack sessions of the same variation. A session that mixes kg/lb and stack sets on one variation is checked once per group.
 
 PRs are re-derivable from `sets`. If a set is edited, deleted, or back-dated, the app recomputes PRs for that variation (§6.2).
 
@@ -572,6 +588,7 @@ All `security definer`, `stable`, with a fixed `search_path`.
 - `is_blocked(a uuid, b uuid) → boolean`: a `blocked` row exists for the pair.
 - `can_view_session(session_id uuid) → boolean`: caller is the owner, **or** the session has `visibility = 'friends'`, `deleted_at is null`, the caller and owner are friends, and neither has blocked the other.
 - `can_view_plan(plan_id uuid) → boolean`: caller is the owner, **or** they are friends and not blocked, **and** either the plan has `visibility = 'friends'` or a `plan_shares` row exists for the caller.
+- `can_view_variation(variation_id uuid) → boolean`: the variation is a library row (`owner_id is null`), **or** the caller owns it, **or** a non-deleted row that the caller can view references it: a `session_entries` row (`variation_id` or `swapped_from_variation_id`) where `can_view_session(session_id)`, or a `plan_entries` row (`preferred_variation_id`) or `plan_entry_alternatives` row (`variation_id`) where `can_view_plan(plan_id)`. Friends therefore see a custom exercise or variation only when it appears in something shared with them.
 
 ### 6.2 Triggers
 
@@ -610,8 +627,8 @@ RLS is enabled on **every** table (`rules.md` §3). `auth.uid()` = the caller.
 | profiles | Any signed-in user can read `username`, `display_name`, `avatar_path` (via a `public_profiles` view). Streak columns only if owner or (`streak_visibility = friends` and `are_friends`). All other columns owner only. | Owner only. |
 | push_tokens | Owner | Owner |
 | muscle_groups, wger_muscle_map | All signed-in | None (service role only) |
-| equipment, exercises, variations, exercise_muscles, variation_equipment | Library rows (`owner_id is null`): all signed-in. Custom rows: owner, or accepted friends (needed to display shared sessions and plans). | Owner for custom rows; library rows service role only. |
-| variation_muscles | Owner, or friends | Owner |
+| equipment, exercises, variations, exercise_muscles, variation_equipment | Library rows (`owner_id is null`): all signed-in. Custom rows: owner, or when `can_view_variation` is true for a related variation: `variations` the row itself; `exercises` and `exercise_muscles` any variation of the exercise; `variation_equipment` its variation; `equipment` any variation linked to it through `variation_equipment`. | Owner for custom rows; library rows service role only. |
+| variation_muscles | Owner, or `can_view_variation(variation_id)` | Owner |
 | gyms, gym_equipment | Owner | Owner |
 | plans | `can_view_plan(id)` | Owner |
 | plan_entries, plan_entry_alternatives | `can_view_plan(plan_id)` | Owner |
@@ -638,9 +655,13 @@ Every policy above needs tests proving allowed **and** denied access (`rules.md`
 
 ## 8. Sync (PowerSync)
 
+PowerSync **Sync Streams** define what syncs (`powersync/sync-config.yaml`). Sync Streams are GA and replace PowerSync's older Sync Rules, which are deprecated.
+
+Replication setup lives in `supabase/migrations/0000_powersync.sql`: the `powersync` publication (all tables) and the `powersync_role` that hosted PowerSync instances connect as. The role's password is set by hand once per hosted environment, never in a migration. The local PowerSync service (`powersync/docker-compose.yaml`) connects as the local `postgres` user.
+
 ### 8.1 What syncs
 
-| Bucket | Contents | Who gets it |
+| Stream | Contents | Who gets it |
 |---|---|---|
 | `library` | `muscle_groups`, `wger_muscle_map`, and library rows (`owner_id is null`) of `equipment`, `exercises`, `variations`, `exercise_muscles`, `variation_equipment` where active | Every user |
 | `user_data` | All rows the user owns in: `profiles` (own row), `weekly_goals`, custom `equipment`/`exercises`/`variations`/`exercise_muscles`/`variation_equipment`/`variation_muscles`, `gyms`, `gym_equipment`, `plans`, `plan_entries`, `plan_entry_alternatives`, `sessions`, `session_entries`, `sets`, `personal_records`, `photos`, `body_metrics`, `nutrition_logs`, `recovery_inputs`, `muscle_soreness` | That user only |
@@ -648,21 +669,25 @@ Every policy above needs tests proving allowed **and** denied access (`rules.md`
 
 Soft-deleted rows still sync (so deletes reach other devices); the app filters `deleted_at is null` in queries.
 
-Sketch of `powersync/sync-rules.yaml`:
+Sketch of `powersync/sync-config.yaml` (Sync Streams):
 
 ```yaml
-bucket_definitions:
+config:
+  edition: 3
+
+streams:
   library:
-    data:
+    auto_subscribe: true
+    queries:
       - SELECT * FROM exercises WHERE owner_id IS NULL AND is_active
       - SELECT * FROM variations WHERE owner_id IS NULL AND is_active
       - SELECT * FROM muscle_groups
       # …other library tables
   user_data:
-    parameters: SELECT request.user_id() AS user_id
-    data:
-      - SELECT * FROM sessions WHERE owner_id = bucket.user_id
-      - SELECT * FROM sets WHERE owner_id = bucket.user_id
+    auto_subscribe: true
+    queries:
+      - SELECT * FROM sessions WHERE owner_id = auth.user_id()
+      - SELECT * FROM sets WHERE owner_id = auth.user_id()
       # …every user-owned table, same pattern
 ```
 
@@ -670,7 +695,7 @@ bucket_definitions:
 
 - The app writes to local SQLite; PowerSync queues the change.
 - The upload connector sends each change to Supabase (upsert by `id`, or soft delete) using the user's JWT, so **RLS applies to every synced write**.
-- Same-row conflicts: last write wins (server `updated_at`). Separate rows per set keep real conflicts rare.
+- Same-row conflicts: last write wins (server `updated_at`), which in practice means the last upload wins. Accepted for v1 (`architecture.md` §10). Separate rows per set keep real conflicts rare.
 
 ### 8.3 Local type mapping
 
@@ -702,5 +727,6 @@ SQLite on the phone has fewer types than Postgres:
 ## 10. Open items to verify during build
 
 - Confirm wger's current variation-group field and muscle IDs when writing the import (`wger_muscle_map` seed).
-- Confirm PowerSync's current sync-rules syntax and attachment helper for photos.
+- Confirm PowerSync's attachment helper for photos. (Sync Streams were chosen over the deprecated Sync Rules in November 2026.)
+- Tables with non-uuid keys (`muscle_groups`, `wger_muscle_map`) need their key exposed as a text `id` column in the stream query.
 - Decide purge window for soft-deleted rows (30 days proposed).

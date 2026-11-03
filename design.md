@@ -92,15 +92,15 @@ All values live in one theme file (`apps/mobile/theme/tokens.ts`). Components mu
 
 #### Muscle heatmap ramp (5 steps)
 
-| Step | Meaning | Light | Dark |
-|---|---|---|---|
-| 0 | Not trained | `#E4E0D6` | `#2A2925` |
-| 1 | Light (1–4 sets) | `#F2C9B2` | `#4A2A1B` |
-| 2 | Moderate (5–9) | `#E99A72` | `#7A3A1E` |
-| 3 | In guide range (10–20) | `#D9541E` | `#C95424` |
-| 4 | Above guide range | `#8F3110` | `#F28A5A` |
+| Step | Meaning | Default guide 10–20 | Light | Dark |
+|---|---|---|---|---|
+| 0 | Not trained | 0 sets | `#E4E0D6` | `#2A2925` |
+| 1 | Below half of guide min | under 5 | `#F2C9B2` | `#4A2A1B` |
+| 2 | Half of guide min, up to min | 5 to under 10 | `#E99A72` | `#7A3A1E` |
+| 3 | Within guide range (min–max) | 10–20 | `#D9541E` | `#C95424` |
+| 4 | Above guide max | over 20 | `#8F3110` | `#F28A5A` |
 
-Steps follow the user's volume guide (`profiles.volume_guide_min/max`). Colour is never the only signal: every muscle also shows its set count in text.
+Steps are relative to the user's volume guide (`profiles.volume_guide_min/max`), so changing the guide moves every boundary. Colour is never the only signal: every muscle also shows its set count in text.
 
 **Contrast**: all text/background pairs meet WCAG AA (4.5:1 body, 3:1 large). `ink-3` is used only at 14 px and above.
 
@@ -234,8 +234,8 @@ Small rectangular labels, `label` style, 1 px border, `r-sm`, padding 2 × 6.
 |---|---|
 | `PR` | `accent` fill, `accent-ink` text |
 | `W` / `D` / `F` (warm-up / drop / failure) | `rule-strong` border, `ink-2` text |
-| `SWAPPED` | `rule-strong` border, `ink-2` text |
-| `SKIPPED` | `ink-3` text, strikethrough on the exercise name |
+| `SWAPPED` (entry has `swapped_from_variation_id`) | `rule-strong` border, `ink-2` text |
+| `SKIPPED` (entry `status = skipped`) | `ink-3` text, strikethrough on the exercise name |
 | `PRIVATE` / `FRIENDS` | `ink-2` border and text |
 | `NOT AT THIS GYM` | `warn` border and text |
 
@@ -446,7 +446,8 @@ Wireframes show structure and hierarchy, not exact sizes. Characters like `│` 
 - **Weight cell** shows value and unit together. Tapping opens the keypad; the unit switch is on the keypad.
 - **Set number cell**: tap to open the set details sheet (type W/D/F, RPE or RIR, note). Shows `W`, `D`, `F` letters for non-working sets.
 - **PR row**: `accent-wash` background, 3 px `accent` left bar, `PR` tag. Light haptic.
-- **Skipped exercise**: name struck through in `ink-3`, `SKIPPED` tag, collapsed to one line, `Undo` text action.
+- **Skipped exercise** (`status = skipped`): name struck through in `ink-3`, `SKIPPED` tag, collapsed to one line, `Undo` text action.
+- **Added exercise** (`origin = added`): looks like any other entry; the origin only matters when saving changes to the plan.
 - Long-press an exercise name for: Skip, Remove, Move up/down, Change variation.
 - The keypad covers the lower half while entering; the current row scrolls into view above it.
 
@@ -620,7 +621,7 @@ Variation screen: the same chart for one variation, then `PERSONAL BESTS` (heavi
  ‹  This week's muscles              27 Oct – 2 Nov
 ════════════════════════════════════════════════
  [ front map ]  [ back map ]
- Not trained ■ 1–4 ■ 5–9 ■ 10–20 ■ 20+
+ Not trained ■ Under 5 ■ Under 10 ■ 10–20 ■ Over 20
 
  MUSCLE        SETS   GUIDE    RECOVERY
  ─────────────────────────────────────────
@@ -637,6 +638,8 @@ Variation screen: the same chart for one variation, then `PERSONAL BESTS` (heavi
  Recovery times are a guide based on volume and
  how you feel. Not medical advice.
 ```
+
+The legend numbers come from the user's guide range (shown here for the default 10–20).
 
 Tapping a muscle's recovery opens a sheet with the reasons ("Heavy session Sat · 2 sets to failure · soreness 3: +48 h") and `Mark as recovered` / `Mark as not recovered`.
 

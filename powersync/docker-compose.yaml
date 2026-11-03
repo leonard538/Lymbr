@@ -1,0 +1,61 @@
+# Local PowerSync service for development (architecture.md section 8).
+# Start the local Supabase stack first (`pnpm supabase start`), then:
+#   docker compose -f powersync/docker-compose.yaml up -d
+name: lymbr-powersync
+
+services:
+  powersync:
+    image: journeyapps/powersync-service:1.27.2
+    command: ['start', '-r', 'unified']
+    depends_on:
+      storage:
+        condition: service_healthy
+    environment:
+      POWERSYNC_CONFIG_PATH: /config/service.yaml
+      # Local Supabase and storage defaults, not secrets. supabase_db_lymbr is
+      # the local Supabase Postgres container (project_id in config.toml).
+      PS_DATA_SOURCE_URI: postgresql://postgres:postgres@supabase_db_lymbr:5432/postgres
+      PS_STORAGE_URI: postgresql://powersync:powersync@storage:5432/powersync_storage
+      PS_PORT: '8080'
+    volumes:
+      - ./service.yaml:/config/service.yaml:ro
+      - ./sync-config.yaml:/config/sync-config.yaml:ro
+    ports:
+      - '8080:8080'
+    networks:
+      - default
+      - supabase
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:8080/probes/liveness').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 2s
+      retries: 15
+
+  # PowerSync's own bucket storage (separate from the Supabase database).
+  storage:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: powersync
+      POSTGRES_PASSWORD: powersync
+      POSTGRES_DB: powersync_storage
+    volumes:
+      - storage-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U powersync -d powersync_storage']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+networks:
+  supabase:
+    name: supabase_network_lymbr
+    external: true
+
+volumes:
+  storage-data:

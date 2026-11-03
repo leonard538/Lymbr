@@ -1,0 +1,11 @@
+# Project docs keep their authored formatting
+*.md
+
+pnpm-lock.yaml
+**/dist/
+**/coverage/
+**/.turbo/
+**/.expo/
+**/android/
+**/ios/
+supabase/.temp/

@@ -1,6 +1,5 @@
 # Feature Specification: Lymbr — Flexible Social Workout Tracker
 
-**Feature Branch**: `001-social-workout-tracker`
 **Created**: 2026-11-02
 **Status**: Ready for planning
 **Owner**: Whi
@@ -14,7 +13,7 @@
 
 The first release is for Whi and a small group of friends to test. Social features are **friends-only and private by default**. A public community is a later phase.
 
-### Guiding principles (input for `/speckit-constitution`)
+### Guiding principles (formalised in `rules.md`)
 
 1. **Flexibility over rigidity.** A deviation from a plan is normal, never an error.
 2. **Variation-level truth.** Weights and progression are tracked per variation, rolled up to the exercise.
@@ -37,7 +36,7 @@ The first release is for Whi and a small group of friends to test. Social featur
 - Q: Gym profiles? → A: Yes. Used to suggest variations available at the current gym.
 - Q: Exercise API? → A: Use the best free option. wger was chosen (free, no auth for public data, includes muscle and equipment data).
 - Q: Set detail? → A: Set type, effort rating (RPE/RIR) and per-set notes. **No rest timer.**
-- Q: Units? → A: Units can be mixed within a session and even within an exercise (e.g., dumbbells in lbs, cable in kg, plates in kg, machines in lbs).
+- Q: Units? → A: Units can be mixed within a session and even within an exercise (e.g., dumbbells in lb, cable in kg, plates in kg, machines in lb).
 - Q: Height/weight? → A: Tracked over time. Logging is optional, at any cadence (per session, weekly, monthly, yearly).
 - Q: Nutrition? → A: Per day, optional, typed manually.
 - Q: Photos? → A: Up to 5 per session. Private by default with a toggle to make visible to friends. One is marked as the cover/thumbnail.
@@ -332,8 +331,8 @@ Whi exports all his data.
 
 ### Edge Cases
 
-- **Mixed units in one exercise**: dumbbell sets in lbs and cable sets in kg within one session. Each set keeps its own unit; totals and PRs convert to a common unit (1 lb = 0.45359237 kg); display shows the original value.
-- **Machine weights with no real unit** (stack "plate 8"): allow a "stack level" unit, which is compared only with itself and excluded from cross-unit conversion.
+- **Mixed units in one exercise**: dumbbell sets in lb and cable sets in kg within one session. Each set keeps its own unit; totals and PRs convert to a common unit (1 lb = 0.45359237 kg); display shows the original value.
+- **Machine weights with no real unit** (stack "plate 8"): allow a "stack level" unit, which is compared only with itself and excluded from cross-unit conversion. Stack sets get their own session volume (stack level × reps), compared only with other stack sessions of the same variation.
 - **Bodyweight exercises** (pull-ups, dips): weight = bodyweight + added weight; **assisted** variations use negative assistance. Volume uses the most recent body weight if available.
 - **Non-weight exercises**: planks (duration), cardio (duration/distance), reps-only exercises. Set metrics depend on the variation's tracking type.
 - **Unilateral exercises**: option to log left/right reps separately or "per side".
@@ -359,7 +358,7 @@ Whi exports all his data.
 
 - **FR-001**: Users MUST sign up and sign in with email (and optionally Google/Apple sign-in).
 - **FR-002**: Users MUST have a unique username used for friend search.
-- **FR-003**: Onboarding MUST ask (skippable) for height, weight, default weight unit (kg/lbs), weekly session goal, and week start day.
+- **FR-003**: Onboarding MUST ask (skippable) for height, weight, default weight unit (kg/lb), weekly session goal, and week start day.
 - **FR-004**: Users MUST be able to delete their account and all data.
 
 **Exercise library & variations**
@@ -386,7 +385,7 @@ Whi exports all his data.
 - **FR-030**: Users MUST be able to start a session from a plan, from a past session ("Repeat"), or empty.
 - **FR-031**: During a session, users MUST be able to swap a variation, skip, add, remove and reorder exercises **without changing the source plan**.
 - **FR-032**: On finishing a session that deviated from its plan, the system MUST offer to save changes to the plan, defaulting to No.
-- **FR-033**: Each set MUST record: value(s) per tracking type, weight unit per set (kg, lbs, or stack level), reps, set type (warm-up, working, drop set, failure), optional effort rating (RPE 1–10 or RIR), optional note.
+- **FR-033**: Each set MUST record: value(s) per tracking type, weight unit per set (kg, lb, or stack level), reps, set type (warm-up, working, drop set, failure), optional effort rating (RPE 1–10 or RIR), optional note.
 - **FR-034**: Units MUST be selectable per set; a variation remembers the last unit used.
 - **FR-035**: Sessions MUST record date, start/end time, gym (optional), plan (optional), session notes, and visibility.
 - **FR-036**: Users MUST be able to attach up to 5 photos per session, choose one as cover, and set each photo's visibility (default private).
@@ -417,7 +416,7 @@ Whi exports all his data.
 - **FR-071**: A weekly heatmap MUST show working sets per muscle group (primary = 1 set, secondary = 0.5 set by default).
 - **FR-072**: A weekly volume list MUST compare sets per muscle to a guide range (default 10–20, user-editable).
 - **FR-073**: Users MUST be able to record per-muscle soreness (0–3) and overall readiness (1–5) at any time.
-- **FR-074**: Recovery estimates MUST start from a default rule: ~48 hours for low/moderate volume, ~72 hours for high volume or sets taken to failure, adjusted by soreness (+24h per soreness level above 1) and readiness (low readiness extends, high shortens). Users MUST be able to override per muscle. The rule MUST be shown transparently and labelled as guidance.
+- **FR-074**: Recovery estimates MUST start from a default rule: ~48 hours for low/moderate volume, ~72 hours for high volume or sets taken to failure. High volume means 6 or more working sets for that muscle in the session (primary = 1, secondary = 0.5), or any failure set for that muscle. The estimate is adjusted by soreness (+24h per soreness level above 1) and readiness (1: +24h, 2: +12h, 3: no change, 4: −6h, 5: −12h), and never goes below 24h unless the user overrides it. Users MUST be able to override per muscle. The rule MUST be shown transparently and labelled as guidance.
 
 **Gyms & swap suggestions**
 
@@ -470,13 +469,13 @@ Whi exports all his data.
 - **BodyMetric**: user, date, weight (value + unit), height (optional).
 - **Exercise**: name, description, primary muscles, secondary muscles, category, source (wger / custom), wger reference, image.
 - **Variation**: belongs to Exercise; name, equipment, tracking type, muscle overrides, default unit, source (library / custom), owner (for custom).
-- **Muscle**: name, group (chest, back, shoulders, biceps, triceps, forearms, abs, glutes, quads, hamstrings, calves…), body-map region.
+- **Muscle**: name, group (one of 18: chest, upper back, lats, traps, front delts, side delts, rear delts, biceps, triceps, forearms, abs, obliques, lower back, glutes, quads, hamstrings, adductors, calves; see `data-model.md` §4.2), body-map region.
 - **Equipment**: name, standard or custom.
 - **Gym**: user, name, equipment list.
 - **Plan**: user, name, notes, visibility, copied-from reference, schedule (optional days of week), reminder enabled.
 - **PlanEntry**: plan, order, exercise, preferred variation, alternative variations, target sets, target rep range, notes.
 - **Session**: user, date, start/end time, gym, source plan (optional), source session (for Repeat), notes, visibility, cover photo, deviated-from-plan flag.
-- **SessionEntry**: session, order, exercise, variation, swap reason (swapped from which plan variation, if any), status (done, skipped, added).
+- **SessionEntry**: session, order, exercise, variation, swap reason (swapped from which plan variation, if any), origin (planned, added), status (pending, done, skipped).
 - **Set**: session entry, order, set type, weight value, weight unit, reps, duration, distance, RPE/RIR, note, PR flags.
 - **PersonalRecord**: user, variation, type (heaviest, rep-at-weight, volume), value, set reference, date.
 - **Photo**: session, storage reference, is cover, visibility.
@@ -508,7 +507,7 @@ Whi exports all his data.
 
 ## Assumptions
 
-- **Platform**: React Native (TypeScript) mobile app for iOS and Android. Backend: Supabase (Postgres, Auth, Storage, Realtime) with a NestJS or Express TypeScript service for logic that shouldn't run on the client (e.g., wger import, notifications). Final choices belong in `/speckit-plan`.
+- **Platform**: React Native (TypeScript) mobile app for iOS and Android. Backend: Supabase (Postgres, Auth, Storage, Realtime) with a NestJS TypeScript service for logic that shouldn't run on the client (e.g., wger import, notifications). Final choices are recorded in `architecture.md`.
 - **Exercise data**: wger is used as the source library because it is free, needs no authentication for public data, and includes muscle and equipment data needed for the body map and swap suggestions. Library data is imported into the app's own database rather than queried live on every search.
 - **Recovery guidance**: the 48–72 hour rule is a widely used general guideline for resistance-trained muscle groups, not a personalised medical model.
 - **Volume guide**: 10–20 working sets per muscle per week is a common hypertrophy guideline and is user-editable.

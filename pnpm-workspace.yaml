@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Dependency install scripts pnpm may run. @parcel/watcher (via Jest) ships
+# prebuilt binaries, so its fallback build script isn't needed.
+allowBuilds:
+  '@parcel/watcher': false

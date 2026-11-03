@@ -13,7 +13,9 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 - **T###**: task ID, in build order.
 - **[P]**: can run in parallel with other [P] tasks in the same phase (different files, no dependency on unfinished tasks).
 - **[US#]**: the user story from `specs.md` this task serves. Setup, Foundational and Polish tasks have no story label.
-- Each task should be one small PR (`rules.md` §7). Reference the task ID and FRs in the PR.
+- Each task is one commit that references its task ID; each phase (or user story, for larger phases) is one PR that lists its FRs (`rules.md` §7).
+- Tasks added after version 1.0 use a letter suffix (e.g., `T043a`) so existing IDs stay stable.
+- **Deferred** marks work that waits on something outside the project (e.g., an Apple Developer account).
 - **Tests are part of the task list**, not optional. Shared logic, RLS policies and P1 flows must be tested (`rules.md` §6).
 
 ## Phase overview
@@ -46,18 +48,18 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 
 **Goal**: an empty monorepo that builds, lints and runs on a phone, with all environments in place.
 
-- [ ] T001 Create monorepo with pnpm workspaces + Turborepo: `apps/mobile`, `apps/api`, `packages/shared`, `supabase/`, `powersync/` — repo root
-- [ ] T002 Add TypeScript (strict) base config shared by all packages — `tsconfig.base.json`
-- [ ] T003 [P] Add ESLint + Prettier config with Conventional Commits check — repo root
-- [ ] T004 [P] Create Expo app (TypeScript, Expo Router, dev build) — `apps/mobile`
-- [ ] T005 [P] Create NestJS app with health endpoint `GET /v1/health` — `apps/api/src/health`
-- [ ] T006 [P] Create `packages/shared` with Jest set up and an empty `src/index.ts` — `packages/shared`
-- [ ] T007 Initialise Supabase CLI project and local stack — `supabase/config.toml`
-- [ ] T008 Create Supabase projects for dev and prod; store keys in env files and CI secrets (never in code) — `.env.example`
-- [ ] T009 Set up PowerSync instances for local/dev/prod connected to Supabase — `powersync/`
+- [x] T001 Create monorepo with pnpm workspaces + Turborepo: `apps/mobile`, `apps/api`, `packages/shared`, `supabase/`, `powersync/` — repo root
+- [x] T002 Add TypeScript (strict) base config shared by all packages — `tsconfig.base.json`
+- [x] T003 [P] Add ESLint + Prettier config with Conventional Commits check — repo root
+- [x] T004 [P] Create Expo app (TypeScript, Expo Router, dev build) — `apps/mobile`
+- [x] T005 [P] Create NestJS app with health endpoint `GET /v1/health` — `apps/api/src/health`
+- [x] T006 [P] Create `packages/shared` with Jest set up and an empty `src/index.ts` — `packages/shared`
+- [x] T007 Initialise Supabase CLI project and local stack — `supabase/config.toml`
+- [ ] T008 Create Supabase projects for dev and prod; store keys in env files and CI secrets (never in code) — `apps/mobile/.env.example`, `apps/api/.env.example`
+- [ ] T009 Set up PowerSync instances for local/dev/prod connected to Supabase — `powersync/`, `supabase/migrations/0000_powersync.sql`
 - [ ] T010 GitHub Actions CI: install, typecheck, lint, test for all packages — `.github/workflows/ci.yml`
 - [ ] T011 [P] Configure EAS Build profiles (development, preview, production) — `apps/mobile/eas.json`
-- [ ] T012 [P] Copy project docs into repo root and add a short README pointing to them — `README.md`
+- [x] T012 [P] Copy project docs into repo root and add a short README pointing to them — `README.md`
 
 **Checkpoint**: CI is green; the Expo dev build opens a blank screen on a real phone; the API health check responds.
 
@@ -85,6 +87,7 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 - [ ] T026 Seed: `muscle_groups`, standard `equipment`, `app_config` row, two test users — `supabase/seed.sql`
 - [ ] T027 RLS test harness (pgTAP or SQL tests run in CI) with helpers to act as user A / user B — `supabase/tests/`
 - [ ] T028 RLS tests for owner-only tables: body metrics, nutrition, recovery, gyms (allow owner, deny everyone else) — `supabase/tests/rls_private.sql`
+- [ ] T028a CI: apply migrations to the dev Supabase project on merge to `main` (`supabase db push`; secrets `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`, `SUPABASE_DEV_PROJECT_REF`). Prod stays a manual promotion — `.github/workflows/migrate-dev.yml`
 
 ### 2b. Shared logic (`packages/shared`)
 
@@ -96,9 +99,9 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 ### 2c. Auth and sync on the phone
 
 - [ ] T033 Supabase client with secure session storage — `apps/mobile/lib/supabase.ts`
-- [ ] T034 Auth screens: sign up, sign in (email, Google, Apple), sign out — `apps/mobile/app/(auth)/`
+- [ ] T034 Auth screens: sign up, sign in (email, Google), sign out. Needs the project owner's Google OAuth client first. **Deferred:** Sign in with Apple (needs an Apple Developer account) — `apps/mobile/app/(auth)/`
 - [ ] T035 PowerSync client schema mirroring synced tables (`data-model.md` §8.3 type mapping) — `apps/mobile/db/schema.ts`
-- [ ] T036 Sync rules for `library` and `user_data` buckets — `powersync/sync-rules.yaml`
+- [ ] T036 Sync Streams `library` and `user_data` — `powersync/sync-config.yaml`
 - [ ] T037 Upload connector: PUT/PATCH → upsert/update, DELETE → soft delete; retry, 401 refresh, `failed_uploads` handling (`api.md` §3.3) — `apps/mobile/db/connector.ts`
 - [ ] T038 Local query helpers that always filter `deleted_at is null` — `apps/mobile/db/queries/`
 - [ ] T039 Sync status hook and the sync line component ("Saved on phone. Will sync.") — `apps/mobile/features/sync/`
@@ -109,6 +112,7 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 - [ ] T041 [P] Tokens: colours (light/dark), type, spacing, radius (4/6/8), lines, motion — `apps/mobile/theme/tokens.ts`
 - [ ] T042 [P] Load Archivo and IBM Plex Mono via `expo-font`; text components per type token — `apps/mobile/theme/typography.tsx`
 - [ ] T043 [P] Lint rules: reject `borderRadius` outside 0/4/6/8; reject icon imports outside allow-listed components — `eslint-rules/`
+- [ ] T043a Set up Jest + React Native Testing Library for the mobile app (`jest-expo` preset), run by `pnpm test` and CI — `apps/mobile/jest.config.js`
 - [ ] T044 Core components: Button (primary/secondary/text/destructive), Input, SegmentedControl, Checkbox, Tag, Row, SectionHeader, Avatar (square), Toast, EmptyState — `apps/mobile/components/`
 - [ ] T045 BottomSheet and Lymbr keypad components — `apps/mobile/components/`
 - [ ] T046 Text-only tab bar (Today, Calendar, Progress, Friends) and app shell — `apps/mobile/app/(tabs)/_layout.tsx`
@@ -116,7 +120,7 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 
 ### 2e. Exercise library import (NestJS)
 
-- [ ] T048 Supabase JWT guard and service-role client — `apps/api/src/auth/`
+- [ ] T048 Supabase JWT guard and a Supabase client using the secret key — `apps/api/src/auth/`
 - [ ] T049 Verify current wger API: variation-group field, muscle IDs, licence fields; write findings into `data-model.md` §4.2 — docs
 - [ ] T050 Seed `wger_muscle_map` from the verified muscle IDs — `supabase/seed.sql`
 - [ ] T051 wger import service: fetch, map muscles, group into exercises/variations, upsert by wger IDs, deactivate missing, store attribution — `apps/api/src/wger-import/`
@@ -141,6 +145,7 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 - [ ] T060 [P] [US4] Body screen: log weight (kg/lb) and height for any date; list of entries — `apps/mobile/app/body/`
 - [ ] T061 [P] [US4] Body-weight chart (W/M/Y/All) following chart rules in `design.md` §5.13 — `apps/mobile/features/body/WeightChart.tsx`
 - [ ] T062 [US4] Settings: units, display unit, week start, timezone, weekly goal — `apps/mobile/app/settings/`
+- [ ] T062a [US4] Avatar upload in Settings: pick, crop to a 512 px square, upload to `avatars/{owner_id}.jpg` (`api.md` §5.2), save `profiles.avatar_path`; square avatar with initials fallback (`design.md` §5.11) — `apps/mobile/features/profile/AvatarPicker.tsx`
 
 **Checkpoint**: US4 acceptance scenarios pass; body metrics never readable by another user (covered by T028).
 
@@ -195,6 +200,7 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 - [ ] T084 [US1] Finish: summary, discard-if-empty, "Save these changes to the plan?" (default Keep plan as is), notes, visibility (default Private) — `apps/mobile/app/session/[id]/finish.tsx`
 - [ ] T085 [US1] Long-open session prompt (> 4 h) — `apps/mobile/features/session/staleSession.ts`
 - [ ] T086 [US1] Today screen v1: scheduled plan, start session, start empty, plans list — `apps/mobile/app/(tabs)/today.tsx`
+- [ ] T086a Set up Maestro for Android E2E: config, a smoke flow that opens the app, how to run it locally, and the nightly CI run (`testing.md` §2) — `apps/mobile/e2e/`
 - [ ] T087 [US1] E2E (Maestro): start plan → swap → skip → add → log sets → finish → plan unchanged — `apps/mobile/e2e/us1-swap.yaml`
 - [ ] T088 [US1] E2E: whole session in airplane mode, reconnect, data on server — `apps/mobile/e2e/us1-offline.yaml`
 - [ ] T089 [US1] Test: editing/deleting a plan after a session leaves the session unchanged — `apps/mobile/features/session/__tests__/snapshot.test.ts`
@@ -382,7 +388,7 @@ An ordered checklist for building Lymbr, grouped by phase and user story. Work t
 - [ ] T165 Error reporting without personal data (IDs only) — `apps/mobile/lib/errors.ts`, `apps/api/src/`
 - [ ] T166 App icon and wordmark (type-based, no gradients) — `apps/mobile/assets/`
 - [ ] T167 Prod: apply migrations, run wger import, configure webhooks and secrets — prod environment
-- [ ] T168 Release to friends: TestFlight + Android internal testing; short "how to give feedback" note — release
+- [ ] T168 Release to friends: Android internal testing; short "how to give feedback" note. **Deferred:** TestFlight (needs an Apple Developer account) — release
 - [ ] T169 Track SC-008 and SC-009 over the first 4 weeks (weekly active loggers, share of sessions with swaps) — analytics query
 
 ---
@@ -424,5 +430,6 @@ Polish: after all chosen stories
 
 ## Notes
 
-- `testing.md` (test strategy, tools, fixtures) can be written before Phase 6; the test tasks above already follow `rules.md` §6.
+- `testing.md` defines the test strategy, tools and fixtures; the test tasks above follow it and `rules.md` §6.
+- **Android first.** iOS-only work (Sign in with Apple, TestFlight, iOS simulator E2E) is deferred until there is an Apple Developer account.
 - If a task reveals the spec or data model is wrong, update the doc first, then the code (`rules.md` §8).
